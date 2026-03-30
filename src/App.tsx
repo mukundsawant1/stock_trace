@@ -6,6 +6,37 @@ import { useTradeStore } from './store/tradeStore';
 import type { Trade } from './types';
 
 const emotions = ['CONFIDENT', 'FEAR', 'GREED', 'NEUTRAL'] as const;
+const CURRENT_VERSION = '1.0.0';
+
+async function checkForUpdates() {
+  try {
+    const res = await fetch('https://api.github.com/repos/mukundsawant1/stock_trace/releases/latest');
+    if (!res.ok) {
+      alert('Unable to check updates. HTTP ' + res.status);
+      return;
+    }
+
+    const data = await res.json();
+    const latestVersion = data.tag_name?.replace(/^v/, '');
+
+    if (!latestVersion) {
+      alert('Unable to parse latest version from GitHub release.');
+      return;
+    }
+
+    if (latestVersion !== CURRENT_VERSION) {
+      const url = data.html_url || data.url;
+      alert('New version available: ' + latestVersion);
+      if (url) {
+        window.open(url, '_blank');
+      }
+    } else {
+      alert('You are using the latest version');
+    }
+  } catch (error: any) {
+    alert('Update check failed: ' + (error?.message || String(error)));
+  }
+}
 
 function computeTradePnL(trade: Trade) {
   const raw = (trade.exitPrice - trade.entryPrice) * trade.quantity;
@@ -41,7 +72,6 @@ function App() {
     note: ''
   });
   const [showHelp, setShowHelp] = useState(false);
-  const [updateMessage, setUpdateMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<'INR' | 'USD' | 'EUR' | 'GBP'>('INR');
   const [startDate, setStartDate] = useState<string>('');
@@ -88,22 +118,6 @@ function App() {
       }, 50);
     }
   }, [loading, trades.length, addTrade]);
-
-  useEffect(() => {
-    const updateAvailable = () => setUpdateMessage('Update available. Downloading...');
-    const updateDownloaded = () => setUpdateMessage('Update downloaded. Restart app to install.');
-    const updateError = () => setUpdateMessage('Update check failed.');
-
-    window.addEventListener('update-available', updateAvailable);
-    window.addEventListener('update-downloaded', updateDownloaded);
-    window.addEventListener('update-error', updateError);
-
-    return () => {
-      window.removeEventListener('update-available', updateAvailable);
-      window.removeEventListener('update-downloaded', updateDownloaded);
-      window.removeEventListener('update-error', updateError);
-    };
-  }, []);
 
   useEffect(() => {
     if (selected) {
@@ -345,7 +359,7 @@ function App() {
             <button onClick={() => { setStartDate(''); setEndDate(''); }} className="border rounded px-2 py-1 text-xs bg-slate-100">Clear Date Filter</button>
 
             <button
-              onClick={() => (window as any).updater?.check?.()}
+              onClick={checkForUpdates}
               className="px-3 py-1 border border-indigo-300 rounded bg-indigo-50 hover:bg-indigo-100 text-sm"
             >
               Check for Updates
@@ -355,11 +369,6 @@ function App() {
           </div>
         </header>
 
-        {updateMessage && (
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700 mb-2">
-            {updateMessage}
-          </div>
-        )}
         {error && (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700">
             {error}

@@ -1,27 +1,16 @@
 {
-  "name": "tradequant_pro",
+  "name": "tradesage",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "main": "electron/main.cjs",
   "build": {
-    "appId": "com.tradequant.pro",
-    "productName": "TradeQuant Pro",
-    "files": [
-      "dist/**/*",
-      "electron/**/*",
-      "package.json"
-    ],
+    "appId": "com.tradesage.app",
+    "productName": "TradeSage",
+    "files": ["dist/**/*", "electron/**/*"],
     "win": {
-      "target": ["portable"]
-    },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "YOUR_GITHUB_USERNAME",
-        "repo": "stock_trace"
-      }
-    ]
+      "target": "portable"
+    }
   },
   "scripts": {
     "dev": "vite",
@@ -33,7 +22,6 @@
   },
   "dependencies": {
     "electron": "^26.1.0",
-    "electron-updater": "^5.3.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "recharts": "^2.9.0",
