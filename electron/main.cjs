@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
+const { autoUpdater } = require('electron-updater');
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_START_URL;
 
@@ -62,11 +63,22 @@ function createWindow() {
   } else {
     win.loadFile(path.join(process.cwd(), 'dist', 'index.html'));
   }
+
+  autoUpdater.on('checking-for-update', () => win.webContents.send('update-status', 'checking'));
+  autoUpdater.on('update-available', () => win.webContents.send('update-available'));
+  autoUpdater.on('update-not-available', () => win.webContents.send('update-status', 'up-to-date'));
+  autoUpdater.on('error', (err) => win.webContents.send('update-error', err == null ? "unknown" : (err.stack || err).toString()));
+  autoUpdater.on('download-progress', (progress) => win.webContents.send('update-progress', progress));
+  autoUpdater.on('update-downloaded', () => win.webContents.send('update-downloaded'));
 }
 
 app.whenReady().then(async () => {
   await ensureDataFile();
   createWindow();
+
+  if (!isDev) {
+    autoUpdater.checkForUpdatesAndNotify();
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -85,4 +97,12 @@ ipcMain.handle('trades:load', async () => {
 
 ipcMain.handle('trades:save', async (_, trades) => {
   return await writeTrades(trades);
+});
+
+ipcMain.handle('updater:check', async () => {
+  try {
+    return await autoUpdater.checkForUpdates();
+  } catch (e) {
+    return { error: e?.message || 'update check failed' };
+  }
 });

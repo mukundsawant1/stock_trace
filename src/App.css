@@ -1,10 +1,34 @@
 * { box-sizing: border-box; }
-body { margin: 0; overflow-y: auto; }
-.app-container { min-height: 100vh; }
+body { margin: 0; overflow-y: auto; font-family: Inter, 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; }
+.app-container { min-height: 100vh; background: #f8fafc; }
 .container { max-width: 1400px; margin: 0 auto; padding: 16px; min-height: 100vh; }
+.header-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; padding: 10px 0; }
+.header-left { display: flex; flex-direction: column; gap: 8px; align-items: center; text-align: center; width: 100%; }
+.header-left h1 { margin: 0; font-size: 2.25rem; font-weight: 800; letter-spacing: -0.02em; color: #0c0f17; }
+.header-left p { margin: 0; font-size: 0.95rem; color: #64748b; }
+.header-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.header-right .meta-item { color: #475569; font-size: 0.9rem; }
+.header-right select, .header-right input, .header-right button { border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; background: white; cursor: pointer; }
+.header-right button:hover { background: #f1f5f9; }
+@media (max-width: 1024px) {
+  .header-row { flex-direction: column; align-items: flex-start; }
+  .header-right { width: 100%; justify-content: flex-start; }
+}
 .dashboard { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
 .dashboard .full-width { grid-column: span 2; }
 .trade-table { max-height: 300px; overflow-y: auto; }
+.card { background: white; border-radius: 12px; padding: 16px; height: 100%; display: flex; flex-direction: column; }
+.chart-container { height: 260px; }
+.charts > div { height: 100%; }
+.card > .chart-container { flex: 1; }
+.quick-entry { height: 100%; display: flex; flex-direction: column; justify-content: space-between; }
+.section-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+.metric-value { font-size: 28px; font-weight: 700; }
+@media (max-width: 1024px) {
+  .charts,
+  .analytics,
+  .bottom { grid-template-columns: 1fr; }
+}
 .bg-slate-100 { background-color: #f1f5f9; }
 .bg-white { background-color: #ffffff; }
 .text-slate-500 { color: #64748b; }

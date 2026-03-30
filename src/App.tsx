@@ -41,6 +41,7 @@ function App() {
     note: ''
   });
   const [showHelp, setShowHelp] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<'INR' | 'USD' | 'EUR' | 'GBP'>('INR');
   const [startDate, setStartDate] = useState<string>('');
@@ -87,6 +88,22 @@ function App() {
       }, 50);
     }
   }, [loading, trades.length, addTrade]);
+
+  useEffect(() => {
+    const updateAvailable = () => setUpdateMessage('Update available. Downloading...');
+    const updateDownloaded = () => setUpdateMessage('Update downloaded. Restart app to install.');
+    const updateError = () => setUpdateMessage('Update check failed.');
+
+    window.addEventListener('update-available', updateAvailable);
+    window.addEventListener('update-downloaded', updateDownloaded);
+    window.addEventListener('update-error', updateError);
+
+    return () => {
+      window.removeEventListener('update-available', updateAvailable);
+      window.removeEventListener('update-downloaded', updateDownloaded);
+      window.removeEventListener('update-error', updateError);
+    };
+  }, []);
 
   useEffect(() => {
     if (selected) {
@@ -305,12 +322,12 @@ function App() {
     <div className="app-container bg-slate-100">
       <div className="container">
       <div className="space-y-4">
-        <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold">TradeSage Desktop</h1>
-            <p className="text-sm text-slate-500">Offline Trading Journal & Performance Intelligence Tool</p>
+        <header className="header-row">
+          <div className="header-left">
+            <h1>TradeSage Desktop</h1>
+            <p>Offline Trading Journal & Performance Intelligence Tool</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="header-right">
             <label className="text-xs text-slate-600">Currency</label>
             <select className="border rounded px-2 py-1 text-sm" value={currency} onChange={(e) => setCurrency(e.target.value as 'INR' | 'USD' | 'EUR' | 'GBP')}>
               <option value="INR">INR</option>
@@ -327,11 +344,22 @@ function App() {
 
             <button onClick={() => { setStartDate(''); setEndDate(''); }} className="border rounded px-2 py-1 text-xs bg-slate-100">Clear Date Filter</button>
 
+            <button
+              onClick={() => (window as any).updater?.check?.()}
+              className="px-3 py-1 border border-indigo-300 rounded bg-indigo-50 hover:bg-indigo-100 text-sm"
+            >
+              Check for Updates
+            </button>
             <button onClick={() => setShowHelp(true)} className="px-3 py-1 border border-slate-300 rounded hover:bg-slate-100 text-sm">Help & Tour</button>
-            <span className="text-sm text-slate-600">Trades in DB: {trades.length}</span>
+            <span className="meta-item">Trades in DB: {trades.length}</span>
           </div>
         </header>
 
+        {updateMessage && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700 mb-2">
+            {updateMessage}
+          </div>
+        )}
         {error && (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700">
             {error}
@@ -339,47 +367,38 @@ function App() {
         )}
 
         {showHelp && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-3xl rounded-lg bg-white p-6 shadow-lg">
-              <div className="flex justify-between items-start">
-                <h2 className="text-xl font-bold">TradeSage Quick Start Guide</h2>
-                <button className="text-sm px-2 py-1 bg-slate-200 rounded" onClick={() => setShowHelp(false)}>Close</button>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 text-left">
+            <div className="w-full max-w-3xl rounded-lg bg-white p-6 shadow-xl">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">TradeSage Quick Help</h2>
+                <button className="text-sm px-3 py-1 bg-slate-200 rounded" onClick={() => setShowHelp(false)}>Close</button>
               </div>
-              <div className="mt-4 space-y-3 text-sm text-slate-700">
-                <p>This app is fully offline. Data is saved to <strong>/data/trades.json</strong> automatically when you add/edit/delete trades. There is no network dependency.</p>
-                <p>Currency conversion is visual only: your underlying P&L stays in trade amount units; symbols adjust via dropdown (INR, USD, EUR, GBP).</p>
-                <h3 className="text-base font-semibold">Screen flow</h3>
-                <ul className="list-disc pl-5 space-y-2">
-                  <li><strong>Top cards</strong>: overall balance, today P&L, win rate, drawdown.</li>
-                  <li><strong>Equity curve</strong>: stitched cumulative account EQUITY per trade date.</li>
-                  <li><strong>Daily P&L</strong>: grouped by calendar day, sum of all trade profitLoss that day.</li>
-                  <li><strong>Trade history</strong>: filtered table for symbol/strategy/type, edit/delete action in each row.</li>
-                  <li><strong>Quick entry</strong>: fastest add/edit flow on right; required: symbol, strategy, entry, exit, quantity.</li>
+              <div className="space-y-3 text-sm text-slate-700">
+                <p>TradeSage is an offline trading journal with built-in analytics. Data persists locally (or in Electron storage when packaged).</p>
+                <p>Currency selects symbol display only; underlying calculations remain consistent with trade amounts.</p>
+                <h3 className="text-base font-semibold">Page layout</h3>
+                <ul className="list-disc pl-5">
+                  <li><strong>Performance overview</strong>: live balance, today P&L, win rate, drawdown.</li>
+                  <li><strong>Charts</strong>: equity curve (step) and daily P&L bars.</li>
+                  <li><strong>Analytics</strong>: breakdown by strategy + full trade stats.</li>
+                  <li><strong>Trade history</strong>: filterable table + edit/delete.</li>
+                  <li><strong>Quick entry</strong>: create/update trades quickly with price and quantity.</li>
                 </ul>
-                <h3 className="text-base font-semibold">How analytics work</h3>
-                <ol className="list-decimal pl-5 space-y-2">
-                  <li>
-                    <strong>Quick Entry</strong>: fill symbol, long/short, emotion, entry, exit, quantity, strategy, note. Then click <strong>Add Trade</strong>.
-                  </li>
-                  <li>
-                    <strong>Trade History</strong>: uses filters above the table to quickly find symbol/strategy/type. Use Edit/Delete on rows.
-                  </li>
-                  <li>
-                    <strong>Analytics cards</strong>: show balance, today P&L, win rate, drawdown in real-time.
-                  </li>
-                  <li>
-                    <strong>Charts</strong>: equity curve updates per trade; daily P&L shows day performance.
-                  </li>
-                  <li>
-                    <strong>Strategy analysis + streaks</strong>: automatic summary by strategy and max winning/losing streak.
-                  </li>
+                <h3 className="text-base font-semibold">How to use</h3>
+                <ol className="list-decimal pl-5">
+                  <li>Enter trade details in <strong>Quick Entry</strong> and hit Add.</li>
+                  <li>Use filters in Trade History (symbol/strategy/type) to focus analysis.</li>
+                  <li>Monitor equity curve and daily P&L updates in real-time.</li>
+                  <li>Check stats for average win/loss, profit factor, and streaks.</li>
+                  <li>Clear date filter or use explicit data range to analyze specific periods.</li>
                 </ol>
-                <p>For best use: start with a trade in Quick Entry, then track chart shape and check drawdown/win rate. For each strategy, confirm per-strategy PL in the summary cards below.</p>
-                <p>Tip: Use the table filters (symbol/strategy/type) whenever your trade count grows; this reduces cognitive burden and supports backtest-like analysis.</p>
+                <h3 className="text-base font-semibold">Data assurance</h3>
+                <p>All calculations use a normalized trade dataset to avoid duplicate or inconsistent values.</p>
               </div>
             </div>
           </div>
         )}
+
 
         <h2 className="text-xl font-bold">Performance Overview</h2>
         <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
@@ -441,9 +460,9 @@ function App() {
             <h2 className="text-lg font-semibold mb-2">Daily P&L</h2>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dailyPL} margin={{ top: 12, right: 16, left: -8, bottom: 6 }}>
+                <BarChart data={dailyPL} margin={{ top: 12, right: 0, left: 0, bottom: 6 }} barCategoryGap="20%">
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
+                  <XAxis dataKey="date" padding={{ left: 30, right: 30 }} />
                   <YAxis />
                   <Tooltip formatter={(value: number) => `${currencySymbols[currency]}${Number(value).toFixed(2)}`} />
                   <Bar dataKey="pnl">
