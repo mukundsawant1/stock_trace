@@ -324,7 +324,7 @@ function App() {
       <div className="space-y-4">
         <header className="header-row">
           <div className="header-left">
-            <h1>TradeSage Desktop</h1>
+            <h1>TradeQuant Pro</h1>
             <p>Offline Trading Journal & Performance Intelligence Tool</p>
           </div>
           <div className="header-right">

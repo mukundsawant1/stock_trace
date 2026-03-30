@@ -1,12 +1,12 @@
 {
-  "name": "stock_trace",
+  "name": "tradequant_pro",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "main": "electron/main.cjs",
   "build": {
-    "appId": "com.tradesage.desktop",
-    "productName": "TradeSage",
+    "appId": "com.tradequant.pro",
+    "productName": "TradeQuant Pro",
     "files": [
       "dist/**/*",
       "electron/**/*",
