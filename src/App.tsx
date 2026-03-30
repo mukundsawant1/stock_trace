@@ -3,10 +3,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import './App.css';
 import { useTradeStore } from './store/tradeStore';
-import { getDailyPL, getDrawdown, getRunningBalance, getStreaks, getWinRate, getAvgWinLoss, groupByStrategy } from './utils/analytics';
 import type { Trade } from './types';
 
 const emotions = ['CONFIDENT', 'FEAR', 'GREED', 'NEUTRAL'] as const;
+
+function computeTradePnL(trade: Trade) {
+  const raw = (trade.exitPrice - trade.entryPrice) * trade.quantity;
+  return trade.type === 'SHORT' ? -raw : raw;
+}
 
 function App() {
   const {
@@ -134,36 +138,37 @@ function App() {
       minute: '2-digit'
     });
 
+  const normalizedTrades = useMemo(() => {
+    return filteredTrades
+      .map((trade) => ({
+        ...trade,
+        pnl: computeTradePnL(trade),
+        time: new Date(trade.timestamp).getTime()
+      }))
+      .sort((a, b) => a.time - b.time);
+  }, [filteredTrades]);
+
   const equityData = useMemo(() => {
     let balance = 0;
-    const sortedTrades = [...filteredTrades].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
     const data: Array<{time:number; displayTime:string; balance:number; pnl:number; index:number}> = [];
 
-    if (sortedTrades.length > 0) {
-      const firstTime = new Date(sortedTrades[0].timestamp).getTime();
+    if (normalizedTrades.length > 0) {
       data.push({
-        time: firstTime - 1,
-        displayTime: new Date(firstTime - 1).toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
+        time: normalizedTrades[0].time - 1,
+        displayTime: new Date(normalizedTrades[0].time - 1).toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
         balance: 0,
         pnl: 0,
         index: 0
       });
     }
 
-    sortedTrades.forEach((trade, idx) => {
-      const pnl = trade.type === 'SHORT'
-        ? (trade.entryPrice - trade.exitPrice) * trade.quantity
-        : (trade.exitPrice - trade.entryPrice) * trade.quantity;
-
-      balance += pnl;
-      const time = new Date(trade.timestamp).getTime();
-
+    normalizedTrades.forEach((trade, idx) => {
+      balance += trade.pnl;
       data.push({
-        time,
-        displayTime: new Date(time).toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
+        time: trade.time,
+        displayTime: new Date(trade.time).toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
         balance,
-        pnl,
+        pnl: trade.pnl,
         index: idx + 1
       });
     });
@@ -177,23 +182,79 @@ function App() {
     });
 
     return data;
-  }, [filteredTrades]);
+  }, [normalizedTrades]);
 
   console.log('Equity Data:', equityData);
 
   const balanceSeries = equityData.map((t) => ({ time: t.displayTime, balance: t.balance }));
-  const dailyPL = getDailyPL(filteredTrades);
-  const winRate = getWinRate(filteredTrades);
-  const avg = getAvgWinLoss(filteredTrades);
-  const drawdown = getDrawdown(getRunningBalance(filteredTrades));
-  const streaks = getStreaks(filteredTrades);
-  const strategySummary = groupByStrategy(filteredTrades);
 
-  const totalPL = filteredTrades.reduce((sum, t) => sum + t.profitLoss, 0);
-  const totalTrades = filteredTrades.length;
-  const totalWins = filteredTrades.filter((t) => t.profitLoss > 0).reduce((sum, t) => sum + t.profitLoss, 0);
-  const totalLosses = Math.abs(filteredTrades.filter((t) => t.profitLoss < 0).reduce((sum, t) => sum + t.profitLoss, 0));
-  const profitFactor = totalLosses === 0 ? (totalWins === 0 ? 0 : Number.POSITIVE_INFINITY) : Number((totalWins / totalLosses).toFixed(2));
+  const dailyPL = useMemo(() => {
+    const dailyMap: Record<string, number> = {};
+    normalizedTrades.forEach((t) => {
+      const day = new Date(t.time).toISOString().slice(0, 10);
+      dailyMap[day] = (dailyMap[day] ?? 0) + t.pnl;
+    });
+    return Object.entries(dailyMap)
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([date, pnl]) => ({ date, pnl: Number(pnl.toFixed(2)) }));
+  }, [normalizedTrades]);
+
+  const totalTrades = normalizedTrades.length;
+  const wins = normalizedTrades.filter((t) => t.pnl > 0);
+  const losses = normalizedTrades.filter((t) => t.pnl < 0);
+
+  const totalProfit = wins.reduce((s, t) => s + t.pnl, 0);
+  const totalLoss = Math.abs(losses.reduce((s, t) => s + t.pnl, 0));
+
+  const avgWin = wins.length ? totalProfit / wins.length : 0;
+  const avgLoss = losses.length ? totalLoss / losses.length : 0;
+  const profitFactor = totalLoss === 0 ? null : Number((totalProfit / totalLoss).toFixed(2));
+
+  let winStreak = 0;
+  let lossStreak = 0;
+  let maxWinStreak = 0;
+  let maxLossStreak = 0;
+
+  normalizedTrades.forEach((t) => {
+    if (t.pnl > 0) {
+      winStreak++;
+      lossStreak = 0;
+    } else if (t.pnl < 0) {
+      lossStreak++;
+      winStreak = 0;
+    } else {
+      winStreak = 0;
+      lossStreak = 0;
+    }
+    maxWinStreak = Math.max(maxWinStreak, winStreak);
+    maxLossStreak = Math.max(maxLossStreak, lossStreak);
+  });
+
+  const totalPL = normalizedTrades.reduce((sum, t) => sum + t.pnl, 0);
+  const winRate = totalTrades ? Number(((wins.length / totalTrades) * 100).toFixed(1)) : 0;
+  const drawdown = useMemo(() => {
+    let peak = 0;
+    let maxDD = 0;
+    let cumulative = 0;
+    normalizedTrades.forEach((t) => {
+      cumulative += t.pnl;
+      if (cumulative > peak) peak = cumulative;
+      const dd = peak - cumulative;
+      if (dd > maxDD) maxDD = dd;
+    });
+    return Number(maxDD.toFixed(2));
+  }, [normalizedTrades]);
+
+  const strategySummary = useMemo(() => {
+    const map = new Map<string, { count: number; pl: number }>();
+    normalizedTrades.forEach((trade) => {
+      const item = map.get(trade.strategy) ?? { count: 0, pl: 0 };
+      item.count += 1;
+      item.pl += trade.pnl;
+      map.set(trade.strategy, item);
+    });
+    return [...map.entries()].map(([strategy, values]) => ({ strategy, ...values, pl: Number(values.pl.toFixed(2)) }));
+  }, [normalizedTrades]);
 
   const isEmptyEquity = equityData.length < 2;
 
@@ -328,7 +389,7 @@ function App() {
           </div>
           <div className="p-4 rounded-lg bg-white shadow-sm">
             <h3 className="text-xs uppercase text-slate-500">Today P&L</h3>
-            <p className="text-3xl font-semibold">{formatCurrency(dailyPL.length ? dailyPL[dailyPL.length - 1].profitLoss : 0)}</p>
+            <p className="text-3xl font-semibold">{formatCurrency(dailyPL.length ? dailyPL[dailyPL.length - 1].pnl : 0)}</p>
           </div>
           <div className="p-4 rounded-lg bg-white shadow-sm">
             <h3 className="text-xs uppercase text-slate-500">Win Rate</h3>
@@ -385,9 +446,9 @@ function App() {
                   <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip formatter={(value: number) => `${currencySymbols[currency]}${Number(value).toFixed(2)}`} />
-                  <Bar dataKey="profitLoss">
+                  <Bar dataKey="pnl">
                     {dailyPL.map((entry, idx) => (
-                      <Cell key={`cell-${idx}`} fill={entry.profitLoss >= 0 ? '#16a34a' : '#dc2626'} />
+                      <Cell key={`cell-${idx}`} fill={entry.pnl >= 0 ? '#16a34a' : '#dc2626'} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -422,11 +483,11 @@ function App() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span>Total Trades</span><strong>{totalTrades}</strong></div>
               <div className="flex justify-between"><span>Total P&L</span><strong>{formatCurrency(totalPL)}</strong></div>
-              <div className="flex justify-between"><span>Profit Factor</span><strong>{profitFactor === Number.POSITIVE_INFINITY ? '∞' : profitFactor}</strong></div>
-              <div className="flex justify-between"><span>Avg Win</span><strong>{formatCurrency(avg.avgWin)}</strong></div>
-              <div className="flex justify-between"><span>Avg Loss</span><strong>{formatCurrency(avg.avgLoss)}</strong></div>
-              <div className="flex justify-between"><span>Max Win Streak</span><strong>{streaks.maxWin}</strong></div>
-              <div className="flex justify-between"><span>Max Loss Streak</span><strong>{streaks.maxLose}</strong></div>
+              <div className="flex justify-between"><span>Profit Factor</span><strong>{profitFactor === null ? '-' : profitFactor === Number.POSITIVE_INFINITY ? '∞' : profitFactor}</strong></div>
+              <div className="flex justify-between"><span>Avg Win</span><strong>{formatCurrency(avgWin)}</strong></div>
+              <div className="flex justify-between"><span>Avg Loss</span><strong>{formatCurrency(avgLoss)}</strong></div>
+              <div className="flex justify-between"><span>Max Win Streak</span><strong>{maxWinStreak}</strong></div>
+              <div className="flex justify-between"><span>Max Loss Streak</span><strong>{maxLossStreak}</strong></div>
             </div>
           </article>
         </section>
