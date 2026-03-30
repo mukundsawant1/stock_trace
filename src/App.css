@@ -1,6 +1,10 @@
 * { box-sizing: border-box; }
 body { margin: 0; overflow-y: auto; }
+.app-container { min-height: 100vh; }
 .container { max-width: 1400px; margin: 0 auto; padding: 16px; min-height: 100vh; }
+.dashboard { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.dashboard .full-width { grid-column: span 2; }
+.trade-table { max-height: 300px; overflow-y: auto; }
 .bg-slate-100 { background-color: #f1f5f9; }
 .bg-white { background-color: #ffffff; }
 .text-slate-500 { color: #64748b; }

@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bar, BarChart, Brush, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import './App.css';
 import { useTradeStore } from './store/tradeStore';
 import { getDailyPL, getDrawdown, getRunningBalance, getStreaks, getWinRate, getAvgWinLoss, groupByStrategy } from './utils/analytics';
@@ -190,7 +190,11 @@ function App() {
   const strategySummary = groupByStrategy(filteredTrades);
 
   const totalPL = filteredTrades.reduce((sum, t) => sum + t.profitLoss, 0);
-  const hideBrush = equityData.length < 3;
+  const totalTrades = filteredTrades.length;
+  const totalWins = filteredTrades.filter((t) => t.profitLoss > 0).reduce((sum, t) => sum + t.profitLoss, 0);
+  const totalLosses = Math.abs(filteredTrades.filter((t) => t.profitLoss < 0).reduce((sum, t) => sum + t.profitLoss, 0));
+  const profitFactor = totalLosses === 0 ? (totalWins === 0 ? 0 : Number.POSITIVE_INFINITY) : Number((totalWins / totalLosses).toFixed(2));
+
   const isEmptyEquity = equityData.length < 2;
 
   const submitTrade = (e: FormEvent<HTMLFormElement>) => {
@@ -237,7 +241,8 @@ function App() {
   };
 
   return (
-    <div className="container bg-slate-100">
+    <div className="app-container bg-slate-100">
+      <div className="container">
       <div className="space-y-4">
         <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
@@ -315,7 +320,8 @@ function App() {
           </div>
         )}
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <h2 className="text-xl font-bold">Performance Overview</h2>
+        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
           <div className="p-4 rounded-lg bg-white shadow-sm">
             <h3 className="text-xs uppercase text-slate-500">Balance</h3>
             <p className="text-3xl font-semibold">{formatCurrency(balanceSeries.length ? balanceSeries[balanceSeries.length - 1].balance : 0)}</p>
@@ -334,66 +340,51 @@ function App() {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <article className="p-4 rounded-lg bg-white shadow-sm">
-            <h2 className="text-lg font-semibold mb-2">Equity Curve</h2>
+        <section className="dashboard mb-4">
+          <article className="full-width p-4 rounded-lg bg-white shadow-sm">
+            <h2 className="text-lg font-semibold mb-2">Performance Chart</h2>
             <div className="h-72">
               {isEmptyEquity ? (
                 <div className="flex h-full items-center justify-center text-slate-500 text-sm border border-dashed rounded-lg">
-                  Add more trades to see meaningful equity curve
+                  No trades yet. Add trades to see performance.
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={260}>
                   <LineChart data={equityData} margin={{ top: 12, right: 16, left: -8, bottom: 6 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis
                       dataKey="time"
-                      type="category"
-                      tickFormatter={(value) =>
-                        new Date(Number(value)).toLocaleDateString() + ' ' +
-                        new Date(Number(value)).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })
-                      }
+                      type="number"
+                      scale="time"
+                      domain={["dataMin", "dataMax"]}
+                      tickFormatter={(value) => new Date(Number(value)).toLocaleDateString()}
                     />
                     <YAxis />
                     <Tooltip
                       labelFormatter={(label) => new Date(Number(label)).toLocaleString()}
-                      formatter={(value: number, name: string, props) => {
-                        if (name === 'balance') {
-                          return [`${currencySymbols[currency]}${Number(value).toFixed(2)}`, 'Balance'];
-                        }
-                        if (name === 'pnl') {
-                          return [`${currencySymbols[currency]}${Number(props.payload?.pnl).toFixed(2)}`, 'Trade P&L'];
-                        }
-                        return [`${currencySymbols[currency]}${Number(value).toFixed(2)}`, name];
-                      }}
+                      formatter={(value: number) => [`${currencySymbols[currency]}${Number(value).toFixed(2)}`, 'Balance']}
                     />
                     <Line
                       type="stepAfter"
                       dataKey="balance"
                       stroke="#22c55e"
                       strokeWidth={2}
-                      dot={{ r: 4 }}
-                      activeDot={{ r: 6 }}
+                      dot={false}
                     />
-                    {!hideBrush && <Brush dataKey="index" height={30} stroke="#8884d8" travellerWidth={10} />}
                   </LineChart>
                 </ResponsiveContainer>
               )}
             </div>
           </article>
-
           <article className="p-4 rounded-lg bg-white shadow-sm">
             <h2 className="text-lg font-semibold mb-2">Daily P&L</h2>
-            <div className="h-56">
+            <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dailyPL} margin={{ top: 12, right: 16, left: -8, bottom: 6 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />
-                  <Tooltip formatter={(value: number) => `$${Number(value).toFixed(2)}`} />
+                  <Tooltip formatter={(value: number) => `${currencySymbols[currency]}${Number(value).toFixed(2)}`} />
                   <Bar dataKey="profitLoss">
                     {dailyPL.map((entry, idx) => (
                       <Cell key={`cell-${idx}`} fill={entry.profitLoss >= 0 ? '#16a34a' : '#dc2626'} />
@@ -405,8 +396,43 @@ function App() {
           </article>
         </section>
 
-        <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <article className="col-span-1 xl:col-span-2 p-4 rounded-lg bg-white shadow-sm">
+        <h2 className="text-xl font-bold">Trade Analytics</h2>
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <article className="p-4 rounded-lg bg-white shadow-sm">
+            <h2 className="text-lg font-semibold mb-2">Strategy Analysis</h2>
+            <div className="space-y-2">
+              {strategySummary.length ? (
+                strategySummary.map((s) => {
+                  const pct = totalPL ? Number(((s.pl / totalPL) * 100).toFixed(1)) : 0;
+                  return (
+                    <div key={s.strategy} className="rounded border p-2 flex justify-between text-sm">
+                      <span>{s.strategy}</span>
+                      <span>{s.count} trades · {formatCurrency(s.pl)} ({pct}%)</span>
+                    </div>
+                  );
+                })
+              ) : (
+                <p>No strategy data</p>
+              )}
+            </div>
+          </article>
+
+          <article className="p-4 rounded-lg bg-white shadow-sm">
+            <h2 className="text-lg font-semibold mb-2">Statistics</h2>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span>Total Trades</span><strong>{totalTrades}</strong></div>
+              <div className="flex justify-between"><span>Total P&L</span><strong>{formatCurrency(totalPL)}</strong></div>
+              <div className="flex justify-between"><span>Profit Factor</span><strong>{profitFactor === Number.POSITIVE_INFINITY ? '∞' : profitFactor}</strong></div>
+              <div className="flex justify-between"><span>Avg Win</span><strong>{formatCurrency(avg.avgWin)}</strong></div>
+              <div className="flex justify-between"><span>Avg Loss</span><strong>{formatCurrency(avg.avgLoss)}</strong></div>
+              <div className="flex justify-between"><span>Max Win Streak</span><strong>{streaks.maxWin}</strong></div>
+              <div className="flex justify-between"><span>Max Loss Streak</span><strong>{streaks.maxLose}</strong></div>
+            </div>
+          </article>
+        </section>
+
+        <section className="dashboard mb-4">
+          <article className="p-4 rounded-lg bg-white shadow-sm">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-4 gap-3">
               <h2 className="text-lg font-semibold">Trade History</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2 w-full lg:w-auto">
@@ -431,7 +457,7 @@ function App() {
             {loading ? (
               <p>Loading trades...</p>
             ) : (
-              <div className="overflow-x-auto max-h-[380px]">
+              <div className="trade-table overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
                   <thead>
                     <tr className="bg-slate-50">
@@ -452,7 +478,7 @@ function App() {
                           <td className="px-2 py-1">{trade.symbol}</td>
                           <td className={`px-2 py-1 font-semibold ${trade.type === 'LONG' ? 'text-emerald-600' : 'text-rose-600'}`}>{trade.type}</td>
                           <td className="px-2 py-1">{trade.quantity}</td>
-                          <td className={`px-2 py-1 font-semibold ${trade.profitLoss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>${trade.profitLoss.toFixed(2)}</td>
+                          <td className={`px-2 py-1 font-semibold ${trade.profitLoss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{currencySymbols[currency]}{trade.profitLoss.toFixed(2)}</td>
                           <td className="px-2 py-1">{trade.strategy}</td>
                           <td className="px-2 py-1 flex gap-1">
                             <button className="px-2 py-1 text-xs rounded bg-slate-100" onClick={() => selectTrade(trade)}>Edit</button>
@@ -533,34 +559,9 @@ function App() {
             </form>
           </article>
         </section>
-
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <article className="p-4 rounded-lg bg-white shadow-sm">
-            <h2 className="text-lg font-semibold mb-2">Strategy Analysis</h2>
-            <div className="space-y-2">
-              {strategySummary.map((s) => (
-                <div key={s.strategy} className="rounded border p-2 flex justify-between text-sm">
-                  <span>{s.strategy}</span>
-                  <span>{s.count} trades / ${s.pl}</span>
-                </div>
-              ))}
-              {strategySummary.length === 0 && <p>No strategy data</p>}
-            </div>
-          </article>
-
-          <article className="p-4 rounded-lg bg-white shadow-sm">
-            <h2 className="text-lg font-semibold mb-2">Statistics</h2>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span>Total P&L</span><strong>{formatCurrency(totalPL)}</strong></div>
-              <div className="flex justify-between"><span>Avg Win</span><strong>{formatCurrency(avg.avgWin)}</strong></div>
-              <div className="flex justify-between"><span>Avg Loss</span><strong>{formatCurrency(avg.avgLoss)}</strong></div>
-              <div className="flex justify-between"><span>Max Win Streak</span><strong>{streaks.maxWin}</strong></div>
-              <div className="flex justify-between"><span>Max Loss Streak</span><strong>{streaks.maxLose}</strong></div>
-            </div>
-          </article>
-        </section>
       </div>
     </div>
+  </div>
   );
 }
 
