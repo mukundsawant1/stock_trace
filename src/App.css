@@ -1,5 +1,6 @@
 * { box-sizing: border-box; }
-body { margin: 0; }
+body { margin: 0; overflow-y: auto; }
+.container { max-width: 1400px; margin: 0 auto; padding: 16px; min-height: 100vh; }
 .bg-slate-100 { background-color: #f1f5f9; }
 .bg-white { background-color: #ffffff; }
 .text-slate-500 { color: #64748b; }

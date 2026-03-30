@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react';
-import { useEffect, useMemo, useState } from 'react';
-import { Bar, BarChart, Brush, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Bar, BarChart, Brush, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import './App.css';
 import { useTradeStore } from './store/tradeStore';
 import { getDailyPL, getDrawdown, getRunningBalance, getStreaks, getWinRate, getAvgWinLoss, groupByStrategy } from './utils/analytics';
@@ -50,9 +50,39 @@ function App() {
   };
 
   const formatCurrency = (value: number) => `${currencySymbols[currency]}${value.toFixed(2)}`;
+  const seededDemoRef = useRef(false);
+
   useEffect(() => {
     loadTrades();
   }, [loadTrades]);
+
+  useEffect(() => {
+    if (!seededDemoRef.current && !loading && trades.length === 0) {
+      seededDemoRef.current = true;
+      addTrade({
+        symbol: 'TST1',
+        type: 'LONG',
+        entryPrice: 100,
+        exitPrice: 110,
+        quantity: 30,
+        strategy: 'demo',
+        emotion: 'CONFIDENT',
+        note: 'Demo trade 1 (+300)'
+      });
+      setTimeout(() => {
+        addTrade({
+          symbol: 'TST2',
+          type: 'SHORT',
+          entryPrice: 200,
+          exitPrice: 100,
+          quantity: 18,
+          strategy: 'demo',
+          emotion: 'GREED',
+          note: 'Demo trade 2 (+3600)'
+        });
+      }, 50);
+    }
+  }, [loading, trades.length, addTrade]);
 
   useEffect(() => {
     if (selected) {
@@ -106,18 +136,47 @@ function App() {
 
   const equityData = useMemo(() => {
     let balance = 0;
-    return getRunningBalance(filteredTrades)
-      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-      .map((trade, index) => {
-        balance += trade.profitLoss;
-        const baseTime = new Date(trade.timestamp).getTime();
-        return {
-          time: baseTime + index,
-          displayTime: new Date(baseTime).toLocaleString(),
-          balance,
-          pnl: trade.profitLoss
-        };
+    const sortedTrades = [...filteredTrades].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    const data: Array<{time:number; displayTime:string; balance:number; pnl:number; index:number}> = [];
+
+    if (sortedTrades.length > 0) {
+      const firstTime = new Date(sortedTrades[0].timestamp).getTime();
+      data.push({
+        time: firstTime - 1,
+        displayTime: new Date(firstTime - 1).toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
+        balance: 0,
+        pnl: 0,
+        index: 0
       });
+    }
+
+    sortedTrades.forEach((trade, idx) => {
+      const pnl = trade.type === 'SHORT'
+        ? (trade.entryPrice - trade.exitPrice) * trade.quantity
+        : (trade.exitPrice - trade.entryPrice) * trade.quantity;
+
+      balance += pnl;
+      const time = new Date(trade.timestamp).getTime();
+
+      data.push({
+        time,
+        displayTime: new Date(time).toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
+        balance,
+        pnl,
+        index: idx + 1
+      });
+    });
+
+    let lastTime = 0;
+    data.forEach((point) => {
+      if (point.time <= lastTime) {
+        point.time = lastTime + 1;
+      }
+      lastTime = point.time;
+    });
+
+    return data;
   }, [filteredTrades]);
 
   console.log('Equity Data:', equityData);
@@ -131,6 +190,8 @@ function App() {
   const strategySummary = groupByStrategy(filteredTrades);
 
   const totalPL = filteredTrades.reduce((sum, t) => sum + t.profitLoss, 0);
+  const hideBrush = equityData.length < 3;
+  const isEmptyEquity = equityData.length < 2;
 
   const submitTrade = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -176,8 +237,8 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen p-4 md:p-8 bg-slate-100">
-      <div className="max-w-[1280px] mx-auto space-y-4">
+    <div className="container bg-slate-100">
+      <div className="space-y-4">
         <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold">TradeSage Desktop</h1>
@@ -276,41 +337,51 @@ function App() {
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <article className="p-4 rounded-lg bg-white shadow-sm">
             <h2 className="text-lg font-semibold mb-2">Equity Curve</h2>
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={equityData} margin={{ top: 12, right: 16, left: -8, bottom: 6 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="time"
-                    minTickGap={20}
-                    tickFormatter={(value) =>
-                      new Date(Number(value)).toLocaleString([], {
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })
-                    }
-                  />
-                  <YAxis />
-                  <Tooltip
-                    labelFormatter={(label) => new Date(Number(label)).toLocaleString()}
-                    formatter={(value: number, name: string) => [
-                      `${currencySymbols[currency]}${Number(value).toFixed(2)}`,
-                      name === 'balance' ? 'Balance' : 'P&L'
-                    ]}
-                  />
-                  <Line
-                    type="stepAfter"
-                    dataKey="balance"
-                    stroke="#22c55e"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                    activeDot={{ r: 6 }}
-                  />
-                  <Brush dataKey="time" height={30} stroke="#8884d8" travellerWidth={10} />
-                </LineChart>
-              </ResponsiveContainer>
+            <div className="h-72">
+              {isEmptyEquity ? (
+                <div className="flex h-full items-center justify-center text-slate-500 text-sm border border-dashed rounded-lg">
+                  Add more trades to see meaningful equity curve
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={equityData} margin={{ top: 12, right: 16, left: -8, bottom: 6 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="time"
+                      type="category"
+                      tickFormatter={(value) =>
+                        new Date(Number(value)).toLocaleDateString() + ' ' +
+                        new Date(Number(value)).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      }
+                    />
+                    <YAxis />
+                    <Tooltip
+                      labelFormatter={(label) => new Date(Number(label)).toLocaleString()}
+                      formatter={(value: number, name: string, props) => {
+                        if (name === 'balance') {
+                          return [`${currencySymbols[currency]}${Number(value).toFixed(2)}`, 'Balance'];
+                        }
+                        if (name === 'pnl') {
+                          return [`${currencySymbols[currency]}${Number(props.payload?.pnl).toFixed(2)}`, 'Trade P&L'];
+                        }
+                        return [`${currencySymbols[currency]}${Number(value).toFixed(2)}`, name];
+                      }}
+                    />
+                    <Line
+                      type="stepAfter"
+                      dataKey="balance"
+                      stroke="#22c55e"
+                      strokeWidth={2}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                    {!hideBrush && <Brush dataKey="index" height={30} stroke="#8884d8" travellerWidth={10} />}
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </article>
 
@@ -323,7 +394,11 @@ function App() {
                   <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip formatter={(value: number) => `$${Number(value).toFixed(2)}`} />
-                  <Bar dataKey="profitLoss" fill="#2563eb" />
+                  <Bar dataKey="profitLoss">
+                    {dailyPL.map((entry, idx) => (
+                      <Cell key={`cell-${idx}`} fill={entry.profitLoss >= 0 ? '#16a34a' : '#dc2626'} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
